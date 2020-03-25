@@ -12,8 +12,7 @@ namespace ixnChatbot.Dialogs
 {
     public class searchDatabase : dialogBase
     {
-        private projectBundle projectResults;
-        private int SEARCH_RESULT_LIMIT = 4; //Number of projects that can be listed at once
+        private readonly int SEARCH_RESULT_LIMIT = 4; //Number of projects that can be listed at once
         private int searchIndex = 0; //Index of projects currently being listen
         
         public searchDatabase(luisRecogniser luisRecogniser) : base(luisRecogniser, nameof(searchDatabase))
@@ -75,7 +74,15 @@ namespace ixnChatbot.Dialogs
             switch (luisResult.TopIntent().intent)
             {
                 case luisResultContainer.Intent.listProjects:
+                    if (!checkForEntities(entities))
+                    {
+                        sendMessage(stepContext, "I'm sorry, please specify a criteria for me to search for, such as" +
+                                                 " keywords or names.", cancellationToken);
+                        break;
+                    }
+                    
                     searchIndex = 0;
+                    sendMessage(stepContext, "Please bare with me, I am searching for projects that match your criteria", cancellationToken);
                     projectBundle searchResult = new projectBundle(entities);
                     
                     if (searchResult.getNumberOfProjects() == 0)
@@ -89,17 +96,32 @@ namespace ixnChatbot.Dialogs
                 
                 case luisResultContainer.Intent.displayMoreProjects:
                     searchIndex += 4;
-                    if (projectResults != null)
-                    {
-                        sendMessage(stepContext, "Here are some more results for your last search.", cancellationToken);
-                        await displayProjects(projectResults, stepContext, cancellationToken);
-                    }
-                    else
+                    if (projectResults == null)
                     {
                         sendMessage(stepContext, "There is no projects to show! Please search for projects first.", cancellationToken);
+                        break;
                     }
+
+                    if (searchIndex >= projectResults.getNumberOfProjects())
+                    {
+                        sendMessage(stepContext, "There are no more projects to show from this search! Here are the last 4 projects.", cancellationToken);
+                        searchIndex -= 4;
+                    }
+                    else sendMessage(stepContext, "Here are some more results for your last search.", cancellationToken);
+                    
+                    
+                    for (int i = 0; i < projectResults.getNumberOfProjects() - searchIndex; i++)
+                    {
+                        Project currentRecord = projectResults.getProject(i + searchIndex);
+                        var response = MessageFactory.Attachment(currentRecord.getSimplePatientCard());
+                        await stepContext.Context.SendActivityAsync(response, cancellationToken);
+                    }
+
                     break;
                 
+                case luisResultContainer.Intent.cancelDialog:
+                    break;
+
                 default:
                     var promptMessage = "I'm sorry, I am having trouble understanding you. What would you like me to do?";
                     return await stepContext.ReplaceDialogAsync(InitialDialogId, promptMessage, cancellationToken);
@@ -116,7 +138,7 @@ namespace ixnChatbot.Dialogs
             sendMessage(stepContext, "I found " + searchResult.getNumberOfProjects() + " related " + 
                                      (searchResult.getNumberOfProjects() == 1 ? "project. " : "projects. Here are the top results:") , cancellationToken);
             
-            for (int i = 0; i < numberOfSearchResults; i++)
+            for (int i = searchIndex; i < searchIndex + numberOfSearchResults; i++)
             {
                 Project currentRecord = searchResult.getProject(i);
                 var response = MessageFactory.Attachment(currentRecord.getSimplePatientCard());
@@ -125,6 +147,15 @@ namespace ixnChatbot.Dialogs
 
             //Assigns the current search to the scope of the dialog in case the user wants to do more with these results
             projectResults = searchResult;
+        }
+
+        private bool checkForEntities(luisResultContainer._Entities entities)
+        {
+            if (entities.contactJobTitle is null && entities.contactName is null && entities.organizationName is null
+                && entities.projectUsages is null && entities.projectLocation is null &&
+                entities.projectCriteria is null
+                && entities.projectDescription is null && entities.organizationOverview is null) return false;
+            return true;
         }
     } 
 }

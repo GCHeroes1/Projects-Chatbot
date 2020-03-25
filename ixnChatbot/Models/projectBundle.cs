@@ -55,15 +55,6 @@ namespace ixnChatbot
             return projects.Length;
         }
 
-        private int getIndexOfField(string field, string[] fields)
-        {
-            for (int i = 0; i < fields.Length; i++)
-            {
-                if (fields[i] == field) return i;
-            }
-            return -1;
-        }
-        
         private string projectSelectionQueryBuilder(String[] contactJobTitle, String[] contactName, String[] organizationName,
             String[] projectUsages,
             String[] projectLocation, String[] projectCriteria, String[] projectDescription, String[] organizationOverview)
@@ -92,25 +83,33 @@ namespace ixnChatbot
                         likeStatementBuilder("projectDescription", projectDescription) + " OR " + 
                         likeStatementBuilder("anyOtherInformation", projectDescription) + " OR ";
             }
-            if(projectLocation != null) query+= likeStatementBuilder("projectLocation", projectLocation) + " OR ";
+            if(projectLocation != null) query+= likeStatementBuilder("organizationAddress", projectLocation) + " OR ";
             if (projectUsages != null)
             {
                 query+= likeStatementBuilder("projectDevices", projectUsages) + " OR " + 
                         likeStatementBuilder("projectDataSamples", projectUsages) + " OR " + 
                         likeStatementBuilder("anyOtherInformation", projectUsages) + " OR ";
             }
-            return query.Substring(0, query.Length - 3) + ";";
+            //If LUIS identified any entities, the if statements above would be executed and at the end of the query,
+            //'OR ' would be left. This lets us isolate the case where no entities are found, so that we get rid of
+            //the WHERE clause in the query
+            if (query.Substring(query.Length-3, 3) == "OR ")
+            {
+                return query.Substring(0, query.Length - 3) + ";";
+            }
+            //Gets rid of the WHERE clause
+            return query.Substring(0, query.Length - 6);
         }
         
-        private string likeStatementBuilder(String entityName, String[] entities)
+        private string likeStatementBuilder(String field, String[] entities)
         {
             string likeStatement = "";
             
             for (int i = 0; i < entities.Length - 1; i++)
             {
-                likeStatement += "p." + entityName + " LIKE '%" + entities[i] + "%' OR ";
+                likeStatement += "p." + field + " LIKE '%" + entities[i] + "%' OR ";
             }
-            likeStatement += "p." + entityName + " LIKE '%" + entities[entities.Length - 1] + "%'";
+            likeStatement += "p." + field + " LIKE '%" + entities[entities.Length - 1] + "%'";
             
             return likeStatement;
         }
